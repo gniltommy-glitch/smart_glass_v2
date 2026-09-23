@@ -1,0 +1,22 @@
+[Unit]
+Description=Smart Glass AI Main Engine
+After=network.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=nguyenhoanghaidang
+SupplementaryGroups=video render dialout i2c
+WorkingDirectory=/home/nguyenhoanghaidang/smart_glass/smart_glass_v2
+ExecStart=/home/nguyenhoanghaidang/smart_glass/myenv/bin/python -u main_coordinator.py --config config.local.json
+Restart=always
+RestartSec=3
+TimeoutStopSec=12
+KillMode=control-group
+Environment=PYTHONUNBUFFERED=1
+Environment=OMP_NUM_THREADS=2
+Environment=OPENBLAS_NUM_THREADS=1
+
+[Install]
+WantedBy=multi-user.target

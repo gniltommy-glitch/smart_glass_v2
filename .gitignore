@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.cache/
+test_camera.jpg
+test_mp3.wav
+firmware/build/*.o
+firmware/build/*.map
+models/*.pt
+models/*.onnx
+models/currency.pt
+models/ocr/*.onnx
+models/ocr/*.pth
+models/piper/

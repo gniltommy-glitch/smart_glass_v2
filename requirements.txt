@@ -1,0 +1,12 @@
+# Picamera2 và libcamera lấy từ apt; giữ OpenCV < 4.12 để tương thích NumPy 1.x.
+numpy>=1.26,<2
+opencv-python==4.11.0.86
+opencv-python-headless==4.11.0.86
+pyserial==3.5
+smbus2==0.5.0
+Pillow>=10,<12
+PyYAML>=6,<7
+ultralytics>=8.3,<9
+piper-tts==1.4.2
+rapidocr-onnxruntime==1.3.24
+vietocr==0.3.13
