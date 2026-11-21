@@ -184,6 +184,43 @@ class SmartGlassAppBridge:
         event(self.queues, "audio_test")
         return web.json_response({"ok": True})
 
+    async def demo_obstacle_avoid(self, request):
+        """Demo Cấp độ 1: Vật cản nhỏ / né cục bộ vài bước."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        direction = body.get("avoid_direction", "left")
+        dist = body.get("distance_m", 2.0)
+        msg = body.get("message", f"Phát hiện vật cản nhỏ trên vỉa hè cách {dist} mét. Vui lòng bước sang {direction} để né.")
+        from ..utils.channels import notify_app
+        notify_app(self.queues, {
+            "type": "obstacle_avoid",
+            "avoid_direction": direction,
+            "distance_m": dist,
+            "message": msg,
+        })
+        return web.json_response({"ok": True, "level": 1, "type": "obstacle_avoid"})
+
+    async def demo_path_blocked(self, request):
+        """Demo Cấp độ 2: Bị chặn hoàn toàn lối đi -> app dựng lại lộ trình."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        reason = body.get("reason", "blocked_path")
+        dist = body.get("distance_m", 3.0)
+        msg = body.get("message", "Lối đi bị chặn hoàn toàn do rào chắn/công trình. Đang yêu cầu tìm đường mới.")
+        from ..utils.channels import notify_app
+        notify_app(self.queues, {
+            "type": "path_blocked",
+            "reason": reason,
+            "distance_m": dist,
+            "avoid_direction": body.get("avoid_direction", "left"),
+            "message": msg,
+        })
+        return web.json_response({"ok": True, "level": 2, "type": "path_blocked"})
+
 
 def create_app(bridge, token):
     @web.middleware
@@ -199,6 +236,8 @@ def create_app(bridge, token):
     app.router.add_post("/settings", bridge.configure_settings)
     app.router.add_get("/device/status", bridge.get_status)
     app.router.add_post("/audio/test", bridge.audio_test)
+    app.router.add_post("/demo/obstacle_avoid", bridge.demo_obstacle_avoid)
+    app.router.add_post("/demo/path_blocked", bridge.demo_path_blocked)
     return app
 
 

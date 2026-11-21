@@ -83,23 +83,64 @@ class AppLinkTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(resp["turn_confirmed"])
         await ws.close()
 
-    async def test_ws_broadcasts_path_blocked_from_outbox(self):
+    async def test_ws_broadcasts_obstacle_avoid_from_outbox(self):
+        """Cấp độ 1: Né cục bộ sang trái/phải khi có vật cản nhỏ trên vỉa hè."""
         ws = await self.client.ws_connect("/ws", headers=self.headers)
         task = asyncio.create_task(self.bridge.broadcast_outbox())
 
-        # Gửi sự kiện điểm mù / đường bị chặn từ coordinator
+        notify_app(self.queues, {
+            "type": "obstacle_avoid",
+            "avoid_direction": "right",
+            "distance_m": 2.5,
+            "message": "Có vật cản trên vỉa hè, né sang phải",
+        })
+
+        msg = await asyncio.wait_for(ws.receive_json(), timeout=2.0)
+        self.assertEqual(msg["type"], "obstacle_avoid")
+        self.assertEqual(msg["avoid_direction"], "right")
+        self.assertEqual(msg["distance_m"], 2.5)
+
+        task.cancel()
+        await ws.close()
+
+    async def test_ws_broadcasts_path_blocked_from_outbox(self):
+        """Cấp độ 2: Bị chặn hoàn toàn lối đi (rào chắn/công trình)."""
+        ws = await self.client.ws_connect("/ws", headers=self.headers)
+        task = asyncio.create_task(self.bridge.broadcast_outbox())
+
         notify_app(self.queues, {
             "type": "path_blocked",
-            "reason": "blind_spot",
+            "reason": "construction",
             "avoid_direction": "left",
             "distance_m": 3.0,
-            "message": "Phát hiện điểm mù phía trước",
+            "message": "Phát hiện rào chắn công trình chặn lối đi",
         })
 
         msg = await asyncio.wait_for(ws.receive_json(), timeout=2.0)
         self.assertEqual(msg["type"], "path_blocked")
-        self.assertEqual(msg["reason"], "blind_spot")
+        self.assertEqual(msg["reason"], "construction")
         self.assertEqual(msg["avoid_direction"], "left")
+
+        task.cancel()
+        await ws.close()
+
+    async def test_demo_endpoints_broadcast_proper_levels(self):
+        ws = await self.client.ws_connect("/ws", headers=self.headers)
+        task = asyncio.create_task(self.bridge.broadcast_outbox())
+
+        # Test demo Cấp 1
+        resp1 = await self.client.post("/demo/obstacle_avoid", json={"avoid_direction": "left"}, headers=self.headers)
+        self.assertEqual(resp1.status, 200)
+        msg1 = await asyncio.wait_for(ws.receive_json(), timeout=2.0)
+        self.assertEqual(msg1["type"], "obstacle_avoid")
+        self.assertEqual(msg1["avoid_direction"], "left")
+
+        # Test demo Cấp 2
+        resp2 = await self.client.post("/demo/path_blocked", json={"reason": "blocked_path"}, headers=self.headers)
+        self.assertEqual(resp2.status, 200)
+        msg2 = await asyncio.wait_for(ws.receive_json(), timeout=2.0)
+        self.assertEqual(msg2["type"], "path_blocked")
+        self.assertEqual(msg2["reason"], "blocked_path")
 
         task.cancel()
         await ws.close()

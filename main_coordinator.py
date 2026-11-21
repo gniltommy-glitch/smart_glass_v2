@@ -133,18 +133,19 @@ def announce_corridor(state, queues, summary):
     if queues["config"]["tof"]["calibrated"] and summary["direction"]:
         direction = {"left": "bên trái", "right": "bên phải", "straight": "chính giữa"}[summary["direction"]]
         text += f" Khoảng trống quan sát được lớn hơn ở phía {direction}. Hãy kiểm tra trước khi di chuyển."
+        # Cấp độ 1: Vật cản nhỏ / điểm mù trên vỉa hè nhưng vẫn có hành lang thoáng -> gửi obstacle_avoid để né cục bộ
         notify_app(queues, {
-            "type": "path_blocked",
-            "reason": "blind_spot",
-            "distance_m": summary.get("mean_m") or 3.0,
+            "type": "obstacle_avoid",
             "avoid_direction": summary["direction"],
+            "distance_m": summary.get("mean_m") or 2.5,
             "message": text,
         })
     else:
-        text += " Chưa xác định được lối đi phù hợp."
+        text += " Chưa xác định được lối đi phù hợp. Lối đi phía trước bị chặn hoàn toàn."
+        # Cấp độ 2: Không tìm thấy lối đi / bị chặn hoàn toàn -> gửi path_blocked để app đánh dấu né & gọi GraphHopper reroute
         notify_app(queues, {
             "type": "path_blocked",
-            "reason": "dead_end",
+            "reason": "blocked_path",
             "distance_m": 2.0,
             "avoid_direction": "left",
             "message": text,
