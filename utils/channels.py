@@ -12,10 +12,16 @@ def make_queues(cfg):
         "tof_queue": 2, "stm32_queue": 32, "vision_queue": 1, "scene_queue": 2,
         "camera_requests": 2, "ocr_queue": 1, "result_queue": 8, "event_queue": 128,
         "uart_tx_queue": 2, "audio_done_queue": 8, "audio_status_queue": 1,
+        "app_outbox": 64, "app_inbox": 16,
     }.items()}
     queues.update(config=cfg, audio_queue=queue.PriorityQueue(maxsize=32),
                   urgent_audio=threading.Event())
     return queues
+
+def notify_app(queues, item):
+    outbox = queues.get("app_outbox")
+    if outbox is not None:
+        latest_put(outbox, item)
 
 def latest_put(channel, item):
     while True:

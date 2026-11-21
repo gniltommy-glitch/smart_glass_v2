@@ -15,12 +15,12 @@ import numpy as np
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from smart_glass_v2.config import ROOT, load_config
-from smart_glass_v2.utils.channels import make_queues, guarded_run, latest_get, speak
+from smart_glass_v2.utils.channels import make_queues, guarded_run, latest_get, speak, notify_app
 from smart_glass_v2.utils.crossing import new_observation, update_observation
 from smart_glass_v2.utils.nav_algorithm import obstacle_summary
 from smart_glass_v2.utils.spatial_matcher import match_distance, sector
 
-WORKERS = ("camera", "tof", "vision", "ocr", "stm32", "audio")
+WORKERS = ("camera", "tof", "vision", "ocr", "stm32", "audio", "app_link")
 
 def new_state():
     return {"mode": "IDLE", "deadline": 0.0, "audio_id": None, "request_id": 0,
@@ -45,6 +45,7 @@ def handle_audio_event(state, item, cfg):
             state["mode"] = "IDLE"
 
 def handle_button(state, queues, item, now):
+    notify_app(queues, {"type": "voice_button", "command": item.get("command")})
     cfg, command = queues["config"], item["command"]
     if now-item["time"] > 2.0:
         return
@@ -92,6 +93,12 @@ def process_scene(state, queues, scene, tof, now):
             state.update(mode="IDLE", cross_next=now+cfg["crossing"]["cooldown_s"])
     if state["capabilities"]["road"] and scene["road_coverage"] >= cfg["navigation"]["road_coverage"] and scene["sidewalk_coverage"] < cfg["navigation"]["sidewalk_coverage"]:
         announce(state, queues, "road", "Bạn có thể đang đi xuống lòng đường. Hãy dừng lại và xác định lại vị trí vỉa hè.", 0, interval=4)
+        notify_app(queues, {
+            "type": "path_blocked",
+            "reason": "no_sidewalk",
+            "distance_m": 1.0,
+            "message": "Bạn có thể đang đi xuống lòng đường. Hãy dừng lại và xác định lại vị trí vỉa hè.",
+        })
         if state["mode"].startswith("CROSS_"):
             state.update(mode="IDLE", cross_next=now+cfg["crossing"]["cooldown_s"])
         return
@@ -126,8 +133,22 @@ def announce_corridor(state, queues, summary):
     if queues["config"]["tof"]["calibrated"] and summary["direction"]:
         direction = {"left": "bên trái", "right": "bên phải", "straight": "chính giữa"}[summary["direction"]]
         text += f" Khoảng trống quan sát được lớn hơn ở phía {direction}. Hãy kiểm tra trước khi di chuyển."
+        notify_app(queues, {
+            "type": "path_blocked",
+            "reason": "blind_spot",
+            "distance_m": summary.get("mean_m") or 3.0,
+            "avoid_direction": summary["direction"],
+            "message": text,
+        })
     else:
         text += " Chưa xác định được lối đi phù hợp."
+        notify_app(queues, {
+            "type": "path_blocked",
+            "reason": "dead_end",
+            "distance_m": 2.0,
+            "avoid_direction": "left",
+            "message": text,
+        })
     announce(state, queues, "crowd", text, 1, interval=5)
 
 def process_tof(state, queues, tof, now):

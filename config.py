@@ -41,6 +41,9 @@ DEFAULT = {
     "runtime": {"startup_timeout_s": 120, "worker_timeout_s": 90,
                 "shutdown_timeout_s": 5, "request_timeout_s": 60,
                 "repeat_s": 5.0, "mock": False},
+    "network": {"host": "0.0.0.0", "port": 8765,
+                "token": "secondsight-default-pairing-secret-key-32ch",
+                "enabled": True},
     "labels": {
         "road": ["street", "road", "roadway"], "sidewalk": ["sidewalk", "walkway", "pavement"],
         "zebra": ["zebra crossing", "zebra_crossing", "crosswalk", "pedestrian_crossing"],
