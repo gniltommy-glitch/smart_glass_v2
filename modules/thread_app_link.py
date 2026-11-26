@@ -15,6 +15,7 @@ import time
 from aiohttp import web, WSMsgType
 
 from ..utils.channels import beat, event, latest_put
+from ..utils.caregiver_bridge import capture_caregiver_snapshot, enqueue_caregiver_speech
 
 
 def read_cpu_temp():
@@ -87,6 +88,22 @@ class SmartGlassAppBridge:
                         })
                     elif mtype == "audio_yielded":
                         event(self.queues, "audio_yielded", hazard_id=msg.get("hazard_id"))
+                    elif mtype == "caregiver_reply":
+                        enqueue_caregiver_speech(
+                            self.queues,
+                            msg.get("reply_text", ""),
+                            msg.get("sender_name", "Người thân"),
+                            msg.get("request_id", ""),
+                        )
+                    elif mtype == "request_caregiver_snapshot":
+                        snap = capture_caregiver_snapshot(
+                            self.queues,
+                            question=msg.get("question", ""),
+                            context_note=msg.get("context_note", ""),
+                            broadcast=True,
+                        )
+                        if snap is not None:
+                            await ws.send_json(snap)
                 except Exception as exc:
                     logging.warning("Lỗi xử lý frame WebSocket từ app: %s", exc)
         finally:
@@ -221,6 +238,49 @@ class SmartGlassAppBridge:
         })
         return web.json_response({"ok": True, "level": 2, "type": "path_blocked"})
 
+    async def caregiver_snapshot(self, request):
+        """Chụp một khung hình tĩnh JPEG nén từ camera kính gửi sang App / Caregiver."""
+        try:
+            body = await request.json()
+            if not isinstance(body, dict):
+                body = {}
+        except Exception:
+            body = {}
+
+        snap = capture_caregiver_snapshot(
+            self.queues,
+            question=body.get("question", ""),
+            context_note=body.get("context_note", ""),
+            broadcast=bool(body.get("broadcast", False)),
+        )
+        if snap is None:
+            raise web.HTTPServiceUnavailable(text="Chưa có khung hình camera sẵn sàng")
+        return web.json_response({"ok": True, **snap})
+
+    async def caregiver_speak(self, request):
+        """Nhận câu trả lời từ người thân và đưa vào hàng đợi Piper -> STM32 đọc qua tai nghe."""
+        try:
+            body = await request.json()
+            assert isinstance(body, dict)
+            reply_text = str(body.get("reply_text", "")).strip()
+            assert len(reply_text) > 0
+        except (ValueError, AssertionError, TypeError):
+            raise web.HTTPBadRequest(text="Thiếu nội dung reply_text từ người thân")
+
+        sender_name = str(body.get("sender_name", "Người thân")).strip() or "Người thân"
+        req_id = str(body.get("request_id", "")).strip()
+        audio_id = enqueue_caregiver_speech(
+            self.queues,
+            reply_text=reply_text,
+            sender_name=sender_name,
+            request_id=req_id,
+        )
+        return web.json_response({
+            "ok": True,
+            "audio_queued": audio_id is not None,
+            "request_id": req_id,
+        })
+
 
 def create_app(bridge, token):
     @web.middleware
@@ -238,6 +298,9 @@ def create_app(bridge, token):
     app.router.add_post("/audio/test", bridge.audio_test)
     app.router.add_post("/demo/obstacle_avoid", bridge.demo_obstacle_avoid)
     app.router.add_post("/demo/path_blocked", bridge.demo_path_blocked)
+    app.router.add_post("/caregiver/snapshot", bridge.caregiver_snapshot)
+    app.router.add_post("/caregiver/speak", bridge.caregiver_speak)
+    app.router.add_post("/assist/reply", bridge.caregiver_speak)
     return app
 
 

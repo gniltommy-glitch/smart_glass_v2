@@ -43,6 +43,15 @@ def run_thread(queues, stop_event):
                     request.release()
             frame_id += 1
             latest_put(queues["vision_queue"], {"frame": small, "time": timestamp, "id": frame_id})
+            if "snapshot_frame_queue" in queues:
+                latest_put(
+                    queues["snapshot_frame_queue"],
+                    {
+                        "frame": large if large is not None else small,
+                        "time": timestamp,
+                        "id": frame_id,
+                    },
+                )
             if capture:
                 try:
                     queues["ocr_queue"].put_nowait({**capture, "frame": large, "time": timestamp})
